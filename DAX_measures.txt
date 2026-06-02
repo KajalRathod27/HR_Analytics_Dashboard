@@ -1,0 +1,202 @@
+# ============================================================
+# HR Analytics Dashboard — Complete DAX Measures Reference
+# Copy each measure into Power BI Desktop (Modeling → New Measure)
+# ============================================================
+
+
+# ────────────────────────────────────────────────────────────
+# PAGE 1: OVERVIEW — Core KPI Measures
+# ────────────────────────────────────────────────────────────
+
+# 1. Total Employees
+Total Employees = COUNTROWS('hr_cleaned')
+
+# 2. Total Attritions
+Total Attritions = 
+    COUNTROWS(FILTER('hr_cleaned', 'hr_cleaned'[Attrition] = "Yes"))
+
+# 3. Attrition Rate (%)
+Attrition Rate = 
+    DIVIDE(
+        COUNTROWS(FILTER('hr_cleaned', 'hr_cleaned'[Attrition] = "Yes")),
+        COUNTROWS('hr_cleaned'),
+        0
+    ) * 100
+
+# 4. Average Monthly Income
+Avg Monthly Income = 
+    AVERAGE('hr_cleaned'[MonthlyIncome])
+
+# 5. Average Age
+Avg Age = 
+    ROUND(AVERAGE('hr_cleaned'[Age]), 1)
+
+# 6. Average Years at Company
+Avg Tenure = 
+    ROUND(AVERAGE('hr_cleaned'[YearsAtCompany]), 1)
+
+# 7. Active Employees (not attrited)
+Active Employees = 
+    COUNTROWS(FILTER('hr_cleaned', 'hr_cleaned'[Attrition] = "No"))
+
+# 8. Overtime Employees count
+Overtime Employees = 
+    COUNTROWS(FILTER('hr_cleaned', 'hr_cleaned'[OverTime] = "Yes"))
+
+# 9. Overtime Rate (%)
+Overtime Rate = 
+    DIVIDE([Overtime Employees], [Total Employees], 0) * 100
+
+
+# ────────────────────────────────────────────────────────────
+# PAGE 2: ATTRITION ANALYSIS
+# ────────────────────────────────────────────────────────────
+
+# 10. Attrition Rate by Department
+# (No extra measure needed — use Attrition Rate with Department slicer)
+
+# 11. High Risk Employees (AttritionRiskScore > 0.6)
+High Risk Employees = 
+    COUNTROWS(
+        FILTER('hr_cleaned', 'hr_cleaned'[AttritionRiskScore] >= 0.6)
+    )
+
+# 12. High Risk Rate (%)
+High Risk Rate = 
+    DIVIDE([High Risk Employees], [Total Employees], 0) * 100
+
+# 13. Attrition by Overtime label
+Attrition with Overtime = 
+    CALCULATE(
+        [Attrition Rate],
+        'hr_cleaned'[OverTime] = "Yes"
+    )
+
+Attrition without Overtime = 
+    CALCULATE(
+        [Attrition Rate],
+        'hr_cleaned'[OverTime] = "No"
+    )
+
+# 14. Avg Risk Score
+Avg Risk Score = 
+    ROUND(AVERAGE('hr_cleaned'[AttritionRiskScore]), 3)
+
+
+# ────────────────────────────────────────────────────────────
+# PAGE 3: SALARY BENCHMARKING
+# ────────────────────────────────────────────────────────────
+
+# 15. Avg Income by Role
+# (Use Avg Monthly Income measure with JobRole axis — no extra measure needed)
+
+# 16. Salary Gap — difference between highest and lowest paid role
+Max Role Income = 
+    MAXX(
+        VALUES('hr_cleaned'[JobRole]),
+        CALCULATE(AVERAGE('hr_cleaned'[MonthlyIncome]))
+    )
+
+Min Role Income = 
+    MINX(
+        VALUES('hr_cleaned'[JobRole]),
+        CALCULATE(AVERAGE('hr_cleaned'[MonthlyIncome]))
+    )
+
+Salary Gap = [Max Role Income] - [Min Role Income]
+
+# 17. % Salary Hike average
+Avg Salary Hike = 
+    ROUND(AVERAGE('hr_cleaned'[PercentSalaryHike]), 1)
+
+# 18. Income vs Attrition correlation label
+# Attrition rate for employees earning below company average
+Below Avg Income Attrition = 
+    CALCULATE(
+        [Attrition Rate],
+        'hr_cleaned'[MonthlyIncome] < CALCULATE(AVERAGE('hr_cleaned'[MonthlyIncome]), ALL('hr_cleaned'))
+    )
+
+Above Avg Income Attrition = 
+    CALCULATE(
+        [Attrition Rate],
+        'hr_cleaned'[MonthlyIncome] >= CALCULATE(AVERAGE('hr_cleaned'[MonthlyIncome]), ALL('hr_cleaned'))
+    )
+
+
+# ────────────────────────────────────────────────────────────
+# PAGE 4: WHAT-IF SIMULATOR
+# (After creating the What-If Parameter called "Salary Increase %")
+# ────────────────────────────────────────────────────────────
+
+# HOW TO CREATE THE WHAT-IF PARAMETER FIRST:
+# Modeling tab → New Parameter
+# Name: Salary Increase %
+# Data type: Decimal Number
+# Minimum: 0    Maximum: 50    Increment: 1    Default: 10
+# ✅ Check "Add slicer to this page"
+# Click OK — Power BI auto-creates a table and measure called "Salary Increase % Value"
+
+# 19. Baseline Attrition Rate (ignores slicer — always shows real rate)
+Baseline Attrition Rate = 
+    CALCULATE(
+        [Attrition Rate],
+        ALL('Salary Increase %')
+    )
+
+# 20. Predicted Attrition After Raise
+# Logic: each 10% salary increase reduces attrition by ~8% relatively
+# This is a simplified linear model good enough for portfolio demo
+Predicted Attrition = 
+    ROUND(
+        [Baseline Attrition Rate] * 
+        (1 - ('Salary Increase %'[Salary Increase % Value] / 100) * 0.8),
+        2
+    )
+
+# 21. Employees Retained by Raise
+Employees Retained = 
+    ROUND(
+        [Total Employees] * 
+        ([Baseline Attrition Rate] - [Predicted Attrition]) / 100,
+        0
+    )
+
+# 22. Estimated Annual Savings from Retention
+# Industry standard: replacing an employee costs ~50% of annual salary
+Avg Annual Income = AVERAGE('hr_cleaned'[AnnualIncome])
+
+Annual Savings from Retention = 
+    ROUND(
+        [Employees Retained] * [Avg Annual Income] * 0.5,
+        0
+    )
+
+# 23. Total Salary Cost Increase from Raise
+Total Salary Cost Increase = 
+    ROUND(
+        SUM('hr_cleaned'[AnnualIncome]) * 
+        ('Salary Increase %'[Salary Increase % Value] / 100),
+        0
+    )
+
+# 24. Net ROI of Salary Raise
+Net ROI = 
+    ROUND(
+        [Annual Savings from Retention] - [Total Salary Cost Increase],
+        0
+    )
+
+# 25. ROI Label (positive = good investment)
+ROI Label = 
+    IF([Net ROI] >= 0, "Positive ROI ✓", "Negative ROI ✗")
+
+
+# ────────────────────────────────────────────────────────────
+# CARD FORMATTING TIPS
+# ────────────────────────────────────────────────────────────
+# Attrition Rate       → Format as % with 2 decimal places
+# Avg Monthly Income   → Format as currency ($) with 0 decimal places
+# Employees Retained   → Format as whole number
+# Annual Savings       → Format as currency with 0 decimal places
+# Net ROI              → Format as currency, conditional color (green if +, red if -)

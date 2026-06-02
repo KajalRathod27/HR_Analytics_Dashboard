@@ -1,0 +1,4 @@
+.venv/
+__pycache__/
+data/hr_cleaned.csv        # optional — exclude large data files
+*.pbix                     # optional — .pbix files are binary & heavy
